@@ -128,29 +128,49 @@ function DashboardContent() {
         fetchData();
     }, [user]);
 
-    // Derived State
+    // Derived State - Restored Logic
     const filteredBags = bags.filter(bag => {
         if (filter === 'mine') return bag.hostUid === user?.uid;
         if (filter === 'shared') return bag.hostUid !== user?.uid;
         return true;
     });
 
+    const totalBags = bags.length;
+    const sharedCount = bags.filter(b => b.hostUid !== user?.uid).length;
+
     if (loading || !user) return <div className="h-screen flex items-center justify-center text-primary-green"><Loader2 className="animate-spin" /></div>;
 
     return (
-        <div className="space-y-8">
-            {/* Header Area */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-zinc-900">My DriveBags</h1>
-                    <p className="text-zinc-500 mt-1">Manage and collaborate on your secure folders.</p>
+        <div className="space-y-10 pb-20">
+            {/* Bento Grid Header */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Welcome Tile */}
+                <div className="md:col-span-2 bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary-green/20 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-primary-green/30 transition-all duration-700"></div>
+                    <div className="relative z-10">
+                        <h1 className="text-4xl font-extrabold mb-2 tracking-tight">Your Stash 🎒</h1>
+                        <p className="text-slate-400 text-lg max-w-md">
+                            Your digital backpack. Locked in & ready for the squad.
+                        </p>
+                    </div>
                 </div>
-                <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="flex items-center gap-2 bg-primary-green text-white px-5 py-2.5 rounded-full font-medium hover:brightness-110 transition-all shadow-sm shadow-green-200"
-                >
-                    <Plus size={20} /> New Bag
-                </button>
+
+                {/* Stats / Action Tile */}
+                <div className="grid grid-rows-2 gap-6">
+                    <div className="bg-white border border-zinc-100 rounded-3xl p-6 flex flex-col justify-center shadow-sm hover:shadow-md transition-shadow">
+                        <div className="text-3xl font-extrabold text-slate-900">{totalBags}</div>
+                        <div className="text-sm font-medium text-slate-500 uppercase tracking-wider">Active Bags</div>
+                    </div>
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="bg-primary-green text-white rounded-3xl p-6 flex items-center justify-between group hover:brightness-110 transition-all shadow-lg shadow-green-200"
+                    >
+                        <span className="font-bold text-lg">Secure a Bag</span>
+                        <div className="bg-white/20 p-2 rounded-full group-hover:scale-110 transition-transform">
+                            <Plus size={24} />
+                        </div>
+                    </button>
+                </div>
             </div>
 
             {/* Notifications Area (Invites & Requests) */}
@@ -161,33 +181,45 @@ function DashboardContent() {
                 </div>
             )}
 
-            {/* Filters */}
-            <div className="flex items-center gap-6 border-b border-zinc-100 pb-1">
-                <FilterTab label="All Bags" active={filter === 'all'} onClick={() => setFilter('all')} />
-                <FilterTab label="Created by Me" active={filter === 'mine'} onClick={() => setFilter('mine')} />
-                <FilterTab label="Shared with Me" active={filter === 'shared'} onClick={() => setFilter('shared')} />
-            </div>
-
-            {/* Grid */}
-            {loadingData ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
-                    {[1, 2, 3].map(i => <div key={i} className="h-48 bg-zinc-100 rounded-xl" />)}
-                </div>
-            ) : filteredBags.length === 0 ? (
-                <div className="text-center py-20 border-2 border-dashed border-zinc-100 rounded-2xl">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-50 mb-4 text-zinc-400">
-                        <Folder size={32} />
+            {/* Main Content Area */}
+            <div>
+                <div className="flex items-center justify-between border-b border-zinc-100 pb-4 mb-8">
+                    <div className="flex items-center gap-8">
+                        <FilterTab label="All Vibes" active={filter === 'all'} onClick={() => setFilter('all')} />
+                        <FilterTab label="My Stash" active={filter === 'mine'} onClick={() => setFilter('mine')} />
+                        <FilterTab label="Shared w/ Squad" active={filter === 'shared'} onClick={() => setFilter('shared')} />
                     </div>
-                    <h3 className="text-lg font-medium text-zinc-900">No bags found</h3>
-                    <p className="text-zinc-500 mt-1">Create a new bag to get started.</p>
                 </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredBags.map(bag => (
-                        <BagCard key={bag.id} bag={bag} currentUid={user.uid} />
-                    ))}
-                </div>
-            )}
+
+                {/* Grid */}
+                {loadingData ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+                        {[1, 2, 3].map(i => <div key={i} className="h-64 bg-zinc-100 rounded-3xl" />)}
+                    </div>
+                ) : filteredBags.length === 0 ? (
+                    <div className="text-center py-24 border-2 border-dashed border-zinc-100 rounded-3xl bg-zinc-50/50">
+                        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white mb-6 text-zinc-300 shadow-sm">
+                            <Folder size={40} />
+                        </div>
+                        <h3 className="text-xl font-bold text-zinc-900 mb-2">No bags? That's kinda mid. 😐</h3>
+                        <p className="text-zinc-500 max-w-xs mx-auto mb-8">
+                            Start a new stash and get the invite link out to the squad.
+                        </p>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors"
+                        >
+                            Start styling
+                        </button>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredBags.map(bag => (
+                            <BagCard key={bag.id} bag={bag} currentUid={user.uid} />
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {showCreateModal && <CreateBagModal onClose={() => setShowCreateModal(false)} />}
         </div>
@@ -196,7 +228,7 @@ function DashboardContent() {
 
 function PendingInvites({ invites }: { invites: any[] }) {
     const { user } = useAuth();
-
+    // ... handleRespond logic remains same ...
     const handleRespond = async (inviteId: string, accept: boolean) => {
         try {
             const token = await user?.getIdToken();
@@ -215,20 +247,20 @@ function PendingInvites({ invites }: { invites: any[] }) {
     };
 
     return (
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
-            <h3 className="text-blue-900 font-bold mb-4 flex items-center gap-2">
-                <Mail size={18} /> Bag Invitations
+        <div className="bg-blue-50/50 border border-blue-100 rounded-3xl p-8 backdrop-blur-sm">
+            <h3 className="text-blue-900 font-bold mb-6 flex items-center gap-2 text-lg">
+                <Mail size={20} /> Squad Invites 💌
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
                 {invites.map(inv => (
-                    <div key={inv.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between">
+                    <div key={inv.id} className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                            <div className="font-bold text-zinc-900">{inv.bagName}</div>
-                            <div className="text-xs text-zinc-500">Invited to join</div>
+                            <div className="font-bold text-zinc-900 text-lg">{inv.bagName}</div>
+                            <div className="text-sm text-zinc-500 font-medium">Wants you in the loop</div>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => handleRespond(inv.id, false)} className="p-2 text-zinc-400 hover:bg-zinc-50 rounded-lg transition-colors"><X size={18} /></button>
-                            <button onClick={() => handleRespond(inv.id, true)} className="px-4 py-2 bg-primary-green text-white text-sm font-bold rounded-lg hover:brightness-110 transition-all">Accept</button>
+                        <div className="flex gap-3">
+                            <button onClick={() => handleRespond(inv.id, false)} className="p-3 text-zinc-400 hover:bg-zinc-50 rounded-xl transition-colors"><X size={20} /></button>
+                            <button onClick={() => handleRespond(inv.id, true)} className="px-5 py-2.5 bg-primary-green text-white text-sm font-bold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-green-200/50">Let me in</button>
                         </div>
                     </div>
                 ))}
@@ -239,19 +271,19 @@ function PendingInvites({ invites }: { invites: any[] }) {
 
 function PendingRequests({ requests }: { requests: any[] }) {
     return (
-        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6">
-            <h3 className="text-amber-900 font-bold mb-4 flex items-center gap-2">
-                <Clock size={18} /> Sent Requests
+        <div className="bg-amber-50/50 border border-amber-100 rounded-3xl p-8 backdrop-blur-sm">
+            <h3 className="text-amber-900 font-bold mb-6 flex items-center gap-2 text-lg">
+                <Clock size={20} /> Pending Glow Ups ⏳
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
                 {requests.map(req => (
-                    <div key={req.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between">
+                    <div key={req.id} className="bg-white p-5 rounded-2xl shadow-sm border border-amber-50/50 flex items-center justify-between">
                         <div>
-                            <div className="font-bold text-zinc-900">{req.bagName || 'Unknown Bag'}</div>
-                            <div className="text-xs text-amber-600 font-medium capitalize">{req.status}</div>
+                            <div className="font-bold text-zinc-900 text-lg">{req.bagName || 'Unknown Bag'}</div>
+                            <div className="text-xs text-amber-600 font-bold uppercase tracking-wide bg-amber-50 px-2 py-1 rounded-md inline-block mt-1">{req.status}</div>
                         </div>
-                        <div className="w-8 h-8 flex items-center justify-center bg-zinc-50 text-zinc-400 rounded-lg">
-                            <Clock size={16} />
+                        <div className="w-10 h-10 flex items-center justify-center bg-zinc-50 text-zinc-400 rounded-xl">
+                            <Clock size={20} />
                         </div>
                     </div>
                 ))}
@@ -265,12 +297,12 @@ function FilterTab({ label, active, onClick }: { label: string, active: boolean,
         <button
             onClick={onClick}
             className={clsx(
-                "pb-3 text-sm font-medium transition-colors relative",
-                active ? "text-primary-green" : "text-zinc-500 hover:text-zinc-800"
+                "pb-1 text-lg font-bold transition-all relative",
+                active ? "text-slate-900" : "text-zinc-400 hover:text-zinc-600"
             )}
         >
             {label}
-            {active && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-green rounded-full" />}
+            {active && <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary-green rounded-full" />}
         </button>
     );
 }
@@ -278,14 +310,14 @@ function FilterTab({ label, active, onClick }: { label: string, active: boolean,
 function BagCard({ bag, currentUid }: { bag: Bag, currentUid: string }) {
     const isHost = bag.hostUid === currentUid;
 
-    // Access Badge Helper
+    // Access Badge Helper - Gen Z Update
     const getAccessBadge = () => {
         switch (bag.accessType) {
-            case 'private': return { label: 'Private', icon: Lock, bg: 'bg-zinc-100', text: 'text-zinc-600' };
-            case 'invite': return { label: 'Invite Only', icon: Mail, bg: 'bg-blue-50', text: 'text-blue-600' };
-            case 'public': return { label: 'Public', icon: Globe, bg: 'bg-green-50', text: 'text-green-600' };
-            case 'request': return { label: 'Request', icon: Shield, bg: 'bg-amber-50', text: 'text-amber-600' };
-            default: return { label: 'Unknown', icon: Lock, bg: 'bg-zinc-100', text: 'text-zinc-600' };
+            case 'private': return { label: 'Locked 🔒', bg: 'bg-zinc-100', text: 'text-zinc-600' };
+            case 'invite': return { label: 'VIP Only 🎟️', bg: 'bg-purple-50', text: 'text-purple-600' };
+            case 'public': return { label: 'For the Streets 🌍', bg: 'bg-green-50', text: 'text-green-600' };
+            case 'request': return { label: 'Knock Knock 🚪', bg: 'bg-amber-50', text: 'text-amber-600' };
+            default: return { label: 'Unknown', bg: 'bg-zinc-100', text: 'text-zinc-600' };
         }
     };
     const badge = getAccessBadge();
@@ -293,43 +325,41 @@ function BagCard({ bag, currentUid }: { bag: Bag, currentUid: string }) {
     return (
         <Link
             href={`/bag/${bag.id}`}
-            className="group block bg-white rounded-xl border border-zinc-100 p-5 shadow-sm hover:shadow-md hover:border-zinc-200 transition-all"
+            className="group block bg-white rounded-3xl border border-zinc-100 p-6 shadow-sm hover:shadow-xl hover:shadow-zinc-200/50 hover:border-zinc-200 transition-all duration-300 transform hover:-translate-y-1"
         >
-            <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-blue-50 text-blue-500 rounded-lg group-hover:bg-primary-green group-hover:text-white transition-colors">
-                    <Folder size={24} fill="currentColor" className="opacity-90" />
+            <div className="flex justify-between items-start mb-6">
+                <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center group-hover:bg-primary-green group-hover:text-white transition-colors duration-300">
+                    <Folder size={24} strokeWidth={2.5} />
                 </div>
                 {/* Access Badge */}
-                <div className={clsx("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", badge.bg, badge.text)}>
-                    <badge.icon size={12} />
+                <div className={clsx("px-3 py-1.5 rounded-full text-xs font-bold tracking-wide", badge.bg, badge.text)}>
                     {badge.label}
                 </div>
             </div>
 
-            <h3 className="text-lg font-bold text-zinc-900 group-hover:text-primary-green transition-colors truncate">
+            <h3 className="text-xl font-extrabold text-zinc-900 group-hover:text-primary-green transition-colors truncate mb-2">
                 {bag.name}
             </h3>
 
-            <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400 border border-white shadow-sm overflow-hidden">
-                        {/* Placeholder for Host Avatar */}
-                        <User size={12} />
+            <div className="mt-6 pt-6 border-t border-zinc-50 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs font-bold">
+                        {isHost ? 'ME' : 'Host'}
                     </div>
-                    <span className="text-xs text-zinc-500">
-                        {isHost ? 'Hosted by You' : 'External Host'}
+                    <span className="text-xs font-medium text-zinc-500">
+                        {isHost ? 'Owner' : 'External'}
                     </span>
                 </div>
 
-                {/* Visual Stack (Mock for now, would need real participant data) */}
-                <div className="flex -space-x-2">
+                {/* Visual Stack */}
+                <div className="flex -space-x-3">
                     {bag.invitedEmails?.length > 0 && (
                         <>
-                            <div className="w-6 h-6 rounded-full bg-zinc-200 border-2 border-white flex items-center justify-center text-[10px] text-zinc-600">
+                            <div className="w-8 h-8 rounded-full bg-zinc-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-zinc-600">
                                 {bag.invitedEmails[0][0].toUpperCase()}
                             </div>
                             {bag.invitedEmails.length > 1 && (
-                                <div className="w-6 h-6 rounded-full bg-zinc-100 border-2 border-white flex items-center justify-center text-[10px] text-zinc-500">
+                                <div className="w-8 h-8 rounded-full bg-zinc-50 border-2 border-white flex items-center justify-center text-[10px] font-bold text-zinc-400">
                                     +{bag.invitedEmails.length - 1}
                                 </div>
                             )}
@@ -349,6 +379,7 @@ function CreateBagModal({ onClose }: { onClose: () => void }) {
     const [creating, setCreating] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
+        // ... (existing logic) ...
         e.preventDefault();
         if (!user || !name) return;
         setCreating(true);
@@ -357,10 +388,7 @@ function CreateBagModal({ onClose }: { onClose: () => void }) {
             const token = await user.getIdToken();
             const res = await fetch("/api/bags/create", {
                 method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                },
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify({ name, accessType })
             });
 
@@ -369,14 +397,8 @@ function CreateBagModal({ onClose }: { onClose: () => void }) {
             } else {
                 const d = await res.json();
                 if (d.error === 'Drive not connected') {
-                    // User requested "popup", but robust OAuth is best with redirect or specific popup handling.
-                    // The requirement: "open the drive permission pop up"
-                    // We will use window.location.href to trigger the server-side flow which shows the consent screen.
-                    // This effectively behaves like a "permission pop up" (full screen).
                     const proceed = confirm("Drive permission is required to create a bag. Connect now?");
-                    if (proceed) {
-                        window.location.href = '/api/auth/drive';
-                    }
+                    if (proceed) window.location.href = '/api/auth/drive';
                 } else {
                     alert("Error: " + d.error);
                 }
@@ -390,59 +412,62 @@ function CreateBagModal({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
-            <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-zinc-900">Create New Bag</h3>
-                    <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600"><X size={24} /></button>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-200">
+            <div className="bg-white p-8 rounded-3xl w-full max-w-lg shadow-2xl scale-100 animate-in zoom-in-95 duration-200 border border-white/20">
+                <div className="flex justify-between items-center mb-8">
                     <div>
-                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Bag Name</label>
+                        <h3 className="text-2xl font-extrabold text-zinc-900">Secure the Bag 💰</h3>
+                        <p className="text-zinc-400 text-sm mt-1">Start a new collection.</p>
+                    </div>
+                    <button onClick={onClose} className="bg-zinc-100 p-2 rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200 transition-colors"><X size={20} /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                        <label className="block text-sm font-bold text-zinc-900 mb-2">What's the vibe? (Name)</label>
                         <input
                             value={name}
                             onChange={e => setName(e.target.value)}
-                            className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-primary-green/20 focus:border-primary-green transition-all"
-                            placeholder="e.g. Q4 Marketing Assets"
+                            className="w-full px-5 py-4 rounded-xl bg-zinc-50 border-2 border-transparent focus:bg-white focus:border-primary-green focus:outline-none transition-all font-medium text-lg placeholder:text-zinc-300"
+                            placeholder="e.g. Summer 2026 Dump 📸"
                             required
                             autoFocus
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Access Type</label>
+                        <label className="block text-sm font-bold text-zinc-900 mb-3">Who's invited?</label>
                         <div className="grid grid-cols-2 gap-3">
                             <AccessOption
-                                label="Private"
-                                desc="Only you"
+                                label="Locked 🔒"
+                                desc="Only you fam"
                                 active={accessType === 'private'}
                                 onClick={() => setAccessType('private')}
                             />
                             <AccessOption
-                                label="Invite Only"
-                                desc="Specific people"
+                                label="VIP Only 🎟️"
+                                desc="Invite the squad"
                                 active={accessType === 'invite'}
                                 onClick={() => setAccessType('invite')}
                             />
                             <AccessOption
-                                label="Request"
-                                desc="Approved requests"
+                                label="Knock Knock 🚪"
+                                desc="They ask nicely"
                                 active={accessType === 'request'}
                                 onClick={() => setAccessType('request')}
                             />
                             <AccessOption
-                                label="Public"
-                                desc="Anyone with link"
+                                label="For the Streets 🌍"
+                                desc="Everyone's invited"
                                 active={accessType === 'public'}
                                 onClick={() => setAccessType('public')}
                             />
                         </div>
                     </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-lg text-zinc-600 font-medium hover:bg-zinc-50 transition-colors">
-                            Cancel
+                    <div className="flex justify-end gap-3 pt-4">
+                        <button type="button" onClick={onClose} className="px-6 py-3 rounded-xl text-zinc-500 font-bold hover:bg-zinc-50 transition-colors">
+                            Nah, cancel
                         </button>
-                        <button type="submit" disabled={creating} className="px-5 py-2.5 rounded-lg bg-primary-green text-white font-medium hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-green-200">
-                            {creating ? "Creating..." : "Create Bag"}
+                        <button type="submit" disabled={creating} className="px-8 py-3 rounded-xl bg-primary-green text-white font-bold hover:brightness-110 hover:shadow-lg hover:shadow-green-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5">
+                            {creating ? "Securing..." : "Create It ✨"}
                         </button>
                     </div>
                 </form>
@@ -457,14 +482,14 @@ function AccessOption({ label, desc, active, onClick }: any) {
             type="button"
             onClick={onClick}
             className={clsx(
-                "p-3 rounded-lg border text-left transition-all",
+                "p-4 rounded-xl text-left transition-all border-2",
                 active
-                    ? "border-primary-green bg-green-50/50 ring-1 ring-primary-green"
-                    : "border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
+                    ? "border-primary-green bg-green-50/30"
+                    : "border-transparent bg-zinc-50 hover:bg-zinc-100"
             )}
         >
-            <div className={clsx("text-sm font-semibold", active ? "text-primary-green" : "text-zinc-900")}>{label}</div>
-            <div className="text-xs text-zinc-500">{desc}</div>
+            <div className={clsx("font-bold text-sm mb-0.5", active ? "text-primary-green" : "text-zinc-900")}>{label}</div>
+            <div className="text-xs text-zinc-500 font-medium">{desc}</div>
         </button>
     );
 }
