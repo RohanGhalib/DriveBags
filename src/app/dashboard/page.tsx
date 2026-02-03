@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
@@ -19,7 +19,7 @@ type Bag = {
     hostData?: any;
 };
 
-export default function Dashboard() {
+function DashboardContent() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
     const [bags, setBags] = useState<Bag[]>([]);
@@ -466,5 +466,17 @@ function AccessOption({ label, desc, active, onClick }: any) {
             <div className={clsx("text-sm font-semibold", active ? "text-primary-green" : "text-zinc-900")}>{label}</div>
             <div className="text-xs text-zinc-500">{desc}</div>
         </button>
+    );
+}
+
+export default function Dashboard() {
+    return (
+        <Suspense fallback={
+            <div className="flex min-h-screen items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-green" />
+            </div>
+        }>
+            <DashboardContent />
+        </Suspense>
     );
 }
