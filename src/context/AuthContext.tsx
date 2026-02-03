@@ -46,6 +46,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const signInWithGoogle = async () => {
         const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/drive.file');
+        // We request offline access to try and facilitate better token handling, though server-side flow is primary.
+        provider.setCustomParameters({
+            access_type: 'offline',
+            prompt: 'consent'
+        });
         try {
             await signInWithPopup(auth, provider);
         } catch (error: any) {

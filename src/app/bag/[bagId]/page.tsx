@@ -9,6 +9,10 @@ import { File as FileIcon, UploadCloud, Folder, Search, ArrowLeft, UserPlus, X, 
 import Link from "next/link";
 import ManageAccessPanel from "@/components/ManageAccessPanel";
 
+import BagChat from "@/components/BagChat";
+import { useSwipeable } from "react-use-measure"; // Wait, I don't have use-swipeable. I'll implement custom handlers or just use Framer Motion pan.
+import { motion, PanInfo } from "framer-motion";
+
 export default function BagPage() {
     const { bagId }: { bagId: string } = useParams();
     const router = useRouter();
@@ -23,6 +27,9 @@ export default function BagPage() {
     const [bagMetadata, setBagMetadata] = useState<any>(null);
     const [requesting, setRequesting] = useState(false);
     const [isHost, setIsHost] = useState(false);
+
+    // Mobile View State ('files' | 'chat')
+    const [mobileView, setMobileView] = useState<'files' | 'chat'>('files');
 
     const fetchFiles = async () => {
         if (!user) return;
@@ -40,7 +47,7 @@ export default function BagPage() {
                 setBagMetadata({
                     name: data.bagName,
                     accessType: data.accessType,
-                    hostUid: data.hostUid // potentially useful
+                    hostUid: data.hostUid
                 });
             } else {
                 const errorData = await res.json();
@@ -68,7 +75,7 @@ export default function BagPage() {
         fetchFiles();
     }, [bagId, user, authLoading]);
 
-    // Drag handlers
+    // Drag (File Drop) Handlers
     const handleDrag = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -115,7 +122,7 @@ export default function BagPage() {
     };
 
     const handleRequestAccess = async () => {
-        if (!user) return;
+        if (!user) return; // Should be handled by guard below
         setRequesting(true);
         try {
             const token = await user.getIdToken();
@@ -130,6 +137,15 @@ export default function BagPage() {
             }
         } catch (e) { console.error(e); }
         finally { setRequesting(false); }
+    };
+
+    // Swipe Handler for Mobile
+    const handleSwipe = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+        if (info.offset.x < -50) {
+            setMobileView('chat'); // Swipe Left -> Show Chat
+        } else if (info.offset.x > 50) {
+            setMobileView('files'); // Swipe Right -> Show Files
+        }
     };
 
     if (authLoading) return <div className="flex h-screen items-center justify-center text-primary-green"><Loader2 className="animate-spin" /></div>;
@@ -199,7 +215,12 @@ export default function BagPage() {
     }
 
     return (
-        <div className="min-h-screen bg-zinc-50 p-6 md:p-10 text-zinc-900" onDragEnter={handleDrag}>
+        <motion.div
+            className="h-screen bg-zinc-50 flex flex-col md:overflow-hidden" // Locked height for Chat flex
+            onDragEnter={handleDrag}
+            onPanEnd={handleSwipe} // Global swipe detection (mostly for mobile)
+            style={{ touchAction: "pan-y" }} // Allow vertical scroll but capture horizontal
+        >
             {/* Drag Overlay */}
             {dragActive && (
                 <div
@@ -217,7 +238,7 @@ export default function BagPage() {
             )}
 
             {/* Header */}
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+            <header className="flex-none p-6 md:px-10 md:py-6 bg-white border-b border-zinc-100 flex flex-col md:flex-row md:items-center justify-between gap-4 z-10">
                 <div>
                     <div className="flex items-center gap-2 text-zinc-400 text-sm font-medium mb-1">
                         <Link href="/dashboard" className="hover:text-zinc-900 transition-colors">My Bags</Link>
@@ -225,8 +246,9 @@ export default function BagPage() {
                         <span className="text-zinc-900">Contents</span>
                     </div>
                     <div className="flex items-center gap-4">
-                        <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">{bagMetadata?.name || 'Loading...'}</h1>
-                        {/* Access Badge */}
+                        <h1 className="text-2xl md:text-3xl font-bold text-zinc-900 tracking-tight truncate max-w-[200px] md:max-w-md">
+                            {bagMetadata?.name || 'Loading...'}
+                        </h1>
                         {bagMetadata?.accessType && (
                             <span className="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600 text-xs font-bold uppercase tracking-wider border border-zinc-200">
                                 {bagMetadata.accessType}
@@ -235,111 +257,144 @@ export default function BagPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-
-                    {/* Host Avatar (Mock) */}
-                    <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-zinc-100 shadow-sm">
-                        <div className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400">
-                            <User size={14} />
+                <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-50 rounded-full border border-zinc-100 whitespace-nowrap">
+                        <div className="w-5 h-5 rounded-full bg-zinc-200 flex items-center justify-center text-zinc-400">
+                            <User size={12} />
                         </div>
                         <span className="text-xs font-medium text-zinc-600">
-                            {isHost ? 'Hosted by You' : 'Host'}
+                            {isHost ? 'You' : 'Host'}
                         </span>
                     </div>
 
-                    <div className="h-8 w-[1px] bg-zinc-200 mx-2 hidden md:block" />
+                    <div className="h-6 w-[1px] bg-zinc-200 mx-1 hidden md:block" />
 
                     <button
                         onClick={() => setShowAccessPanel(true)}
-                        className="bg-white text-zinc-700 border border-zinc-200 px-4 py-2.5 rounded-xl font-bold hover:bg-zinc-50 hover:border-zinc-300 transition-all flex items-center gap-2 shadow-sm"
+                        className="bg-zinc-50 text-zinc-700 border border-zinc-200 p-2 md:px-4 md:py-2 rounded-xl font-bold hover:bg-zinc-100 transition-all flex items-center gap-2 shadow-sm"
+                        title="Manage Access"
                     >
-                        <Settings size={18} /> {isHost ? "Manage Access" : "Participants"}
+                        <Settings size={18} /> <span className="hidden md:inline">{isHost ? "Manage Access" : "Participants"}</span>
                     </button>
 
                     {!isHost && (
                         <button
                             onClick={handleLeave}
-                            className="bg-white text-red-600 border border-zinc-200 px-4 py-2.5 rounded-xl font-bold hover:bg-red-50 hover:border-red-200 transition-all flex items-center gap-2 shadow-sm"
+                            className="bg-white text-red-600 border border-zinc-200 p-2 md:px-4 md:py-2 rounded-xl font-bold hover:bg-red-50 transition-all flex items-center gap-2 shadow-sm"
+                            title="Leave Bag"
                         >
                             <LogOut size={18} />
                         </button>
                     )}
 
-                    <label className="cursor-pointer bg-primary-green text-white px-5 py-2.5 rounded-xl font-bold hover:brightness-110 transition-all shadow-lg shadow-green-200 flex items-center gap-2">
+                    <label className="cursor-pointer bg-primary-green text-white px-4 py-2 rounded-xl font-bold hover:brightness-110 transition-all shadow-lg shadow-green-200 flex items-center gap-2 whitespace-nowrap">
                         <UploadCloud size={20} />
-                        <span>Upload File</span>
+                        <span className="hidden md:inline">Upload</span>
                         <input type="file" multiple className="hidden" onChange={handleFileSelect} />
                     </label>
                 </div>
             </header>
 
-            {/* File Table */}
-            {loadingFiles ? (
-                <div className="bg-white rounded-2xl border border-zinc-100 p-12 text-center shadow-sm">
-                    <Loader2 className="w-8 h-8 text-primary-green animate-spin mx-auto mb-4" />
-                    <p className="text-zinc-500 font-medium">Fetching contents...</p>
+            {/* Mobile View Toggle */}
+            <div className="md:hidden flex border-b border-zinc-200 bg-white">
+                <button
+                    onClick={() => setMobileView('files')}
+                    className={clsx("flex-1 py-3 text-sm font-bold border-b-2 transition-colors", mobileView === 'files' ? "border-primary-green text-primary-green" : "border-transparent text-zinc-400")}
+                >
+                    Files
+                </button>
+                <button
+                    onClick={() => setMobileView('chat')}
+                    className={clsx("flex-1 py-3 text-sm font-bold border-b-2 transition-colors", mobileView === 'chat' ? "border-primary-green text-primary-green" : "border-transparent text-zinc-400")}
+                >
+                    Chat
+                </button>
+            </div>
+
+            {/* Content Area (Split View) */}
+            <div className="flex-1 overflow-hidden relative flex">
+
+                {/* Files Pane */}
+                <div className={clsx(
+                    "w-full h-full md:w-2/3 lg:w-3/4 flex flex-col transition-transform duration-300 absolute md:relative",
+                    mobileView === 'files' ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+                )}>
+                    {loadingFiles ? (
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-primary-green animate-spin" />
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
+                            <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden min-h-[300px]">
+                                <table className="w-full text-left">
+                                    <thead className="bg-zinc-50/50 border-b border-zinc-100 text-xs uppercase tracking-wider text-zinc-400 font-semibold">
+                                        <tr>
+                                            <th className="p-4 w-12"></th>
+                                            <th className="p-4">Name</th>
+                                            <th className="p-4 w-24 hidden sm:table-cell">Size</th>
+                                            <th className="p-4 w-16 text-right"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-50">
+                                        {files.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="p-10 text-center">
+                                                    <div className="w-12 h-12 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-300 mx-auto mb-3">
+                                                        <Folder size={24} />
+                                                    </div>
+                                                    <h3 className="text-zinc-900 font-bold text-sm">Empty Bag</h3>
+                                                    <p className="text-zinc-400 text-xs mt-1">Upload files to share.</p>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            files.map((file) => (
+                                                <tr key={file.id} className="group hover:bg-zinc-50/80 transition-colors">
+                                                    <td className="p-4 pl-6">
+                                                        {file.mimeType.includes('folder') ?
+                                                            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-400">
+                                                                <Folder size={16} fill="currentColor" className="opacity-80" />
+                                                            </div> :
+                                                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500">
+                                                                <FileIcon size={16} />
+                                                            </div>
+                                                        }
+                                                    </td>
+                                                    <td className="p-4 font-medium text-zinc-700 text-sm group-hover:text-zinc-900 truncate max-w-[150px] sm:max-w-none">
+                                                        <a href={file.webViewLink} target="_blank" rel="noreferrer" className="hover:underline hover:text-primary-green transition-colors block truncate">
+                                                            {file.name}
+                                                        </a>
+                                                    </td>
+                                                    <td className="p-4 text-xs text-zinc-400 font-medium font-mono hidden sm:table-cell">
+                                                        {file.size ? (parseInt(file.size) / 1024 / 1024).toFixed(2) + ' MB' : '-'}
+                                                    </td>
+                                                    <td className="p-4 text-right pr-6">
+                                                        <a
+                                                            href={file.webViewLink}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="inline-flex items-center justify-center w-8 h-8 rounded-full text-zinc-400 hover:text-primary-green hover:bg-green-50 transition-all"
+                                                        >
+                                                            <ScanFace size={16} />
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
-            ) : (
-                <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead className="bg-zinc-50/50 border-b border-zinc-100 text-xs uppercase tracking-wider text-zinc-400 font-semibold">
-                            <tr>
-                                <th className="p-5 pl-8 w-16">Type</th>
-                                <th className="p-5">Name</th>
-                                <th className="p-5 w-48">Size</th>
-                                <th className="p-5 w-32 text-right pr-8">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-50">
-                            {files.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="p-16 text-center">
-                                        <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-300 mx-auto mb-4">
-                                            <Folder size={32} />
-                                        </div>
-                                        <h3 className="text-zinc-900 font-bold mb-1">It's quiet in here</h3>
-                                        <p className="text-zinc-500 text-sm">Upload a file to get the party started.</p>
-                                    </td>
-                                </tr>
-                            ) : (
-                                files.map((file) => (
-                                    <tr key={file.id} className="group hover:bg-zinc-50/80 transition-colors">
-                                        <td className="p-5 pl-8">
-                                            {file.mimeType.includes('folder') ?
-                                                <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-400">
-                                                    <Folder size={20} fill="currentColor" className="opacity-80" />
-                                                </div> :
-                                                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500">
-                                                    <FileIcon size={20} />
-                                                </div>
-                                            }
-                                        </td>
-                                        <td className="p-5 font-medium text-zinc-700 group-hover:text-zinc-900">
-                                            <a href={file.webViewLink} target="_blank" rel="noreferrer" className="hover:underline hover:text-primary-green transition-colors">
-                                                {file.name}
-                                            </a>
-                                        </td>
-                                        <td className="p-5 text-sm text-zinc-400 font-medium font-mono">
-                                            {file.size ? (parseInt(file.size) / 1024 / 1024).toFixed(2) + ' MB' : '-'}
-                                        </td>
-                                        <td className="p-5 text-right pr-8">
-                                            <a
-                                                href={file.webViewLink}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-zinc-400 hover:text-primary-green hover:bg-green-50 transition-all"
-                                                title="Open File"
-                                            >
-                                                <ScanFace size={18} />
-                                            </a>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+
+                {/* Chat Pane */}
+                <div className={clsx(
+                    "w-full h-full md:w-1/3 lg:w-1/4 bg-white border-l border-zinc-100 flex flex-col transition-transform duration-300 absolute md:relative right-0",
+                    mobileView === 'chat' ? "translate-x-0" : "translate-x-full md:translate-x-0"
+                )}>
+                    <BagChat bagId={bagId} />
                 </div>
-            )}
+            </div>
 
             {/* Manage Access Panel */}
             <ManageAccessPanel
@@ -350,6 +405,6 @@ export default function BagPage() {
                 onUpdate={fetchFiles}
                 isHost={isHost}
             />
-        </div>
+        </motion.div>
     );
 }

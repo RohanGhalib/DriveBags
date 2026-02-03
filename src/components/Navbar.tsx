@@ -2,15 +2,20 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { usePathname } from 'next/navigation';
 import { Search, Bell, User } from 'lucide-react';
 import { useState } from 'react';
 import NotificationsPanel from './NotificationsPanel';
 
 export default function Navbar() {
     const { user, signInWithGoogle, logout } = useAuth();
+    const pathname = usePathname();
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+
+    // Don't render navbar on landing page (it has its own)
+    if (pathname === '/') return null;
 
     return (
         <nav className="h-16 border-b border-zinc-100 bg-white flex items-center justify-between px-6 sticky top-0 z-40">

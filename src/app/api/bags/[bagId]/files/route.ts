@@ -70,8 +70,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ bagId: st
             pageSize: 100,
         });
 
+        // Filter out system files
+        const visibleFiles = listRes.data.files?.filter((f: any) => f.name !== '_chat_history.json') || [];
+
         return NextResponse.json({
-            files: listRes.data.files,
+            files: visibleFiles,
             isHost,
             bagName: bagData?.name,
             accessType: bagData?.accessType

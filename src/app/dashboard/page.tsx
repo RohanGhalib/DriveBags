@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import Link from "next/link";
 import { Folder, Plus, User, Shield, Globe, Mail, Lock, Search, Filter, X, Check, Clock, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 
 type Bag = {
@@ -31,10 +31,47 @@ export default function Dashboard() {
     const [invites, setInvites] = useState<any[]>([]);
     const [myRequests, setMyRequests] = useState<any[]>([]);
 
+    const searchParams = useSearchParams();
+    const driveCode = searchParams.get('google_drive_code');
+
     // Auth Check
     useEffect(() => {
         if (!loading && !user) router.push("/");
     }, [user, loading, router]);
+
+    // Handle Drive Code Exchange
+    useEffect(() => {
+        if (!driveCode || !user) return;
+
+        const exchangeCode = async () => {
+            try {
+                // Clear the param from URL to avoid loop/re-execution
+                router.replace('/dashboard');
+
+                const token = await user.getIdToken();
+                const res = await fetch('/api/auth/drive/exchange', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code: driveCode })
+                });
+
+                if (res.ok) {
+                    alert('Google Drive connected successfully!');
+                    window.location.reload(); // Reload to refresh state/allow invalidation
+                } else {
+                    const d = await res.json();
+                    alert('Failed to connect Drive: ' + d.error);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('An error occurred connecting Drive.');
+            }
+        };
+        exchangeCode();
+    }, [driveCode, user, router]);
 
     // Data Fetching
     useEffect(() => {
@@ -331,7 +368,18 @@ function CreateBagModal({ onClose }: { onClose: () => void }) {
                 window.location.reload();
             } else {
                 const d = await res.json();
-                alert("Error: " + d.error);
+                if (d.error === 'Drive not connected') {
+                    // User requested "popup", but robust OAuth is best with redirect or specific popup handling.
+                    // The requirement: "open the drive permission pop up"
+                    // We will use window.location.href to trigger the server-side flow which shows the consent screen.
+                    // This effectively behaves like a "permission pop up" (full screen).
+                    const proceed = confirm("Drive permission is required to create a bag. Connect now?");
+                    if (proceed) {
+                        window.location.href = '/api/auth/drive';
+                    }
+                } else {
+                    alert("Error: " + d.error);
+                }
                 setCreating(false);
             }
         } catch (e) {
