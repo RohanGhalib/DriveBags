@@ -174,9 +174,143 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {/* Pending Invites & Requests */}
+            {/* Pending Invites & Requests */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-8 border-t border-zinc-200 dark:border-zinc-800 mt-12">
+                <PendingInvites user={user} />
+                <PendingRequests user={user} />
+            </div>
+
             {showCreateModal && (
                 <CreateBagModal onClose={() => setShowCreateModal(false)} />
             )}
+        </div>
+    );
+}
+
+function PendingInvites({ user }: { user: any }) {
+    const [invites, setInvites] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!user) return;
+        const fetchInvites = async () => {
+            try {
+                const token = await user.getIdToken();
+                const res = await fetch('/api/user/invitations', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setInvites(data.invites);
+                }
+            } catch (e) { console.error(e); }
+            setLoading(false);
+        };
+        fetchInvites();
+    }, [user]);
+
+    const handleRespond = async (inviteId: string, decision: 'accept' | 'reject') => {
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch('/api/invitations/respond', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ inviteId, decision })
+            });
+            if (res.ok) {
+                setInvites(prev => prev.filter(i => i.id !== inviteId));
+                if (decision === 'accept') window.location.reload(); // Refresh to show in Joined
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    if (loading) return <div>Loading invites...</div>;
+    if (invites.length === 0) return null;
+
+    return (
+        <div>
+            <h2 className="text-xl font-semibold flex items-center gap-2 mb-4 text-blue-600">
+                Inbox (Invites)
+            </h2>
+            <div className="space-y-3">
+                {invites.map(invite => (
+                    <div key={invite.id} className="p-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800 flex justify-between items-center">
+                        <div>
+                            <div className="font-medium">{invite.bagName}</div>
+                            <div className="text-xs text-zinc-500">Invited by Host</div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => handleRespond(invite.id, 'reject')} className="p-2 text-red-500 hover:bg-red-100 rounded">
+                                Reject
+                            </button>
+                            <button onClick={() => handleRespond(invite.id, 'accept')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                Join
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function PendingRequests({ user }: { user: any }) {
+    // This is tricky. Users don't store "my requests".
+    // We need a way to find bags where "I" have a pending request.
+    // We can use a Collection Group Query on 'requests' collection WHERE uid == user.uid
+    const [requests, setRequests] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!user) return;
+        // NOTE: This usually requires a Firestore Index if we query complex fields.
+        // But straight up: collectionGroup('requests').where('uid', '==', user.uid)
+        // should work if 'requests' subcollections exist.
+        // However, we need Bag Name. The request doc itself might not have it unless we duplicated it.
+        // Let's assume we don't have bagName in request doc. We'd need to fetch parent bag.
+        // BUT, for now, let's just fetch them.
+
+        // Actually, in `api/bags/[bagId]/page.tsx`, we saw the 'requests' subcollection structure.
+        // It has { uid, email, createdAt, status }.
+        // We'll need to fetch the parent bag to get the name.
+
+        const fetchRequests = async () => {
+            // We can't easily do parent fetch in client without more work.
+            // For the prototype, let's skip "Pending Requests" list OR implement a simple API for it?
+            // Prompt says: "bag should show on dashboard ... with pending approval".
+            // Let's implement an endpoint /api/user/requests that does the heavy lifting.
+            try {
+                const token = await user.getIdToken();
+                const res = await fetch('/api/user/requests', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setRequests(data.requests);
+                }
+            } catch (e) { console.error(e); }
+            setLoading(false);
+        };
+        fetchRequests();
+    }, [user]);
+
+    if (loading) return <div>Loading requests...</div>;
+    if (requests.length === 0) return null;
+
+    return (
+        <div>
+            <h2 className="text-xl font-semibold flex items-center gap-2 mb-4 text-orange-600">
+                Pending Approval
+            </h2>
+            <div className="space-y-3">
+                {requests.map(req => (
+                    <div key={req.bagId} className="p-4 rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-900/10 dark:border-orange-800 opacity-75">
+                        <div className="font-medium">{req.bagName || 'Unknown Bag'}</div>
+                        <div className="text-xs text-orange-600">Waiting for host approval...</div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

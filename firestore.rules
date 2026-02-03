@@ -39,6 +39,16 @@ service cloud.firestore {
       allow update: if isAuthenticated() && resource.data.hostUid == request.auth.uid;
     }
 
+    match /invitations/{inviteId} {
+      allow read: if isAuthenticated() && resource.data.toEmail == request.auth.token.email;
+      // Writes done via API usually, but if client needs to reject? API is safer.
+    }
+
+    // Collection Group query for requests
+    match /{path=**}/requests/{requestId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
     match /chats/{chatId} {
        allow read: if isAuthenticated() && (
          // Complex join: Need to get bagId from chat msg and check bag rules?

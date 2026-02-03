@@ -39,6 +39,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ bagId: st
         if (!isHost && !isInvited && !isPublic) {
             return NextResponse.json({
                 error: 'Forbidden',
+                bagName: bagData?.name,
+                accessType: bagData?.accessType,
                 debug: {
                     userEmail: decodedToken.email,
                     isHost,
@@ -68,7 +70,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ bagId: st
             pageSize: 100,
         });
 
-        return NextResponse.json({ files: listRes.data.files });
+        return NextResponse.json({
+            files: listRes.data.files,
+            isHost,
+            bagName: bagData?.name,
+            accessType: bagData?.accessType
+        });
     } catch (error: any) {
         console.error('Error listing files:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

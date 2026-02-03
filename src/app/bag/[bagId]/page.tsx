@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useUploads } from "@/components/UploadManager";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import clsx from "clsx";
-import { File as FileIcon, UploadCloud, Folder, Search, ArrowLeft, UserPlus, X, Settings, ShieldAlert, Check, ChevronRight } from "lucide-react";
+import { File as FileIcon, UploadCloud, Folder, Search, ArrowLeft, UserPlus, X, Settings, ShieldAlert, Check, ChevronRight, LogOut } from "lucide-react";
 import Link from "next/link";
 
 export default function BagPage() {
     const { bagId }: { bagId: string } = useParams();
+    const router = useRouter();
     const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const { uploadFile } = useUploads();
 
@@ -97,6 +98,22 @@ export default function BagPage() {
         }
     };
 
+    const handleLeave = async () => {
+        if (!confirm("Are you sure you want to leave this bag? You may need to be re-invited to join again.")) return;
+        try {
+            const token = await user?.getIdToken();
+            const res = await fetch(`/api/bags/${bagId}/leave`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                router.push('/dashboard');
+            } else {
+                alert("Failed to leave bag");
+            }
+        } catch (e) { console.error(e); }
+    };
+
     if (authLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
 
     if (!user) {
@@ -153,16 +170,24 @@ export default function BagPage() {
                     </p>
 
                     {canRequest ? (
-                        <button
-                            onClick={handleRequestAccess}
-                            disabled={requesting}
-                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors mb-3 disabled:opacity-50"
-                        >
-                            {requesting ? "Sending Request..." : "Request Access"}
-                        </button>
+                        <div className="w-full">
+                            <button
+                                onClick={handleRequestAccess}
+                                disabled={requesting}
+                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors mb-3 disabled:opacity-50"
+                            >
+                                {requesting ? "Sending Request..." : "Request Access"}
+                            </button>
+                            <p className="text-xs text-zinc-400 mt-2">
+                                This bag requires approval from the host.
+                            </p>
+                        </div>
                     ) : (
                         <div className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded text-sm text-zinc-500 mb-4">
-                            This bag is Private. You must be invited by the host.
+                            {bagMetadata?.accessType === 'invite' ?
+                                "This bag is Invite Only. Please ask the host to send you an invite." :
+                                "This bag is Private. You must be the host to view it."
+                            }
                         </div>
                     )}
 
@@ -197,6 +222,11 @@ export default function BagPage() {
                     {isHost && (
                         <button onClick={() => setShowSettingsModal(true)} className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md">
                             <Settings size={20} />
+                        </button>
+                    )}
+                    {!isHost && (
+                        <button onClick={handleLeave} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md" title="Leave Bag">
+                            <LogOut size={20} />
                         </button>
                     )}
                     <button onClick={() => setShowShareModal(true)} className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md flex items-center gap-2">
@@ -276,12 +306,20 @@ export default function BagPage() {
 
 function SettingsModal({ bagId, metadata, onClose }: { bagId: string, metadata: any, onClose: () => void }) {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'general' | 'requests'>('general');
+    const router = useRouter(); // Use main router from next/navigation
+    const [activeTab, setActiveTab] = useState<'general' | 'requests' | 'invite'>('general');
     const [name, setName] = useState(metadata?.name || "");
     const [accessType, setAccessType] = useState(metadata?.accessType || "private");
     const [saving, setSaving] = useState(false);
     const [requests, setRequests] = useState<any[]>([]);
     const [loadingRequests, setLoadingRequests] = useState(false);
+
+    // Invite State
+    const [inviteEmail, setInviteEmail] = useState("");
+    const [sendingInvite, setSendingInvite] = useState(false);
+
+    // Delete State
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (activeTab === 'requests') {
@@ -311,6 +349,14 @@ function SettingsModal({ bagId, metadata, onClose }: { bagId: string, metadata: 
     const handleSaveGeneral = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
+        // Alert user about mode change
+        if (accessType !== metadata?.accessType && ['private', 'invite', 'request'].includes(accessType) && metadata?.accessType === 'public') {
+            if (!confirm("Switching to Restricted Mode will require non-host users to be re-invited or request access. Continue?")) {
+                setSaving(false);
+                return;
+            }
+        }
+
         try {
             const token = await user?.getIdToken();
             const res = await fetch(`/api/bags/${bagId}`, {
@@ -329,6 +375,48 @@ function SettingsModal({ bagId, metadata, onClose }: { bagId: string, metadata: 
             console.error(e);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleInvite = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSendingInvite(true);
+        try {
+            const token = await user?.getIdToken();
+            const res = await fetch(`/api/bags/${bagId}/invite`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: inviteEmail })
+            });
+            if (res.ok) {
+                alert("Invite sent!");
+                setInviteEmail("");
+            } else {
+                const d = await res.json();
+                alert("Failed: " + d.error);
+            }
+        } catch (e) { console.error(e); }
+        finally { setSendingInvite(false); }
+    };
+
+    const handleDelete = async () => {
+        if (!confirm("Are you sure you want to delete this bag? This cannot be undone.")) return;
+        setDeleting(true);
+        try {
+            const token = await user?.getIdToken();
+            const res = await fetch(`/api/bags/${bagId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                router.push('/dashboard');
+            } else {
+                alert("Failed to delete bag");
+                setDeleting(false);
+            }
+        } catch (e) {
+            console.error(e);
+            setDeleting(false);
         }
     };
 
@@ -352,58 +440,81 @@ function SettingsModal({ bagId, metadata, onClose }: { bagId: string, metadata: 
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-lg w-full max-w-lg border border-zinc-200 dark:border-zinc-800 shadow-xl h-[500px] flex flex-col">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-lg w-full max-w-lg border border-zinc-200 dark:border-zinc-800 shadow-xl h-[550px] flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-bold">Bag Settings</h3>
                     <button onClick={onClose}><X size={20} /></button>
                 </div>
 
-                <div className="flex gap-4 border-b border-zinc-200 dark:border-zinc-800 mb-6">
+                <div className="flex gap-4 border-b border-zinc-200 dark:border-zinc-800 mb-6 overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('general')}
-                        className={clsx("pb-2 text-sm font-medium", activeTab === 'general' ? "border-b-2 border-blue-600 text-blue-600" : "text-zinc-500")}
-                    >
-                        General
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('requests')}
-                        className={clsx("pb-2 text-sm font-medium relative", activeTab === 'requests' ? "border-b-2 border-blue-600 text-blue-600" : "text-zinc-500")}
-                    >
-                        Access Requests
-                        {requests.length > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] px-1.5 rounded-full">{requests.length}</span>}
-                    </button>
+                        className={clsx("pb-2 text-sm font-medium whitespace-nowrap", activeTab === 'general' ? "border-b-2 border-blue-600 text-blue-600" : "text-zinc-500")}
+                    > General </button>
+                    {accessType === 'request' && (
+                        <button
+                            onClick={() => setActiveTab('requests')}
+                            className={clsx("pb-2 text-sm font-medium relative whitespace-nowrap", activeTab === 'requests' ? "border-b-2 border-blue-600 text-blue-600" : "text-zinc-500")}
+                        >
+                            Access Requests
+                            {requests.length > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] px-1.5 rounded-full">{requests.length}</span>}
+                        </button>
+                    )}
+                    {accessType === 'invite' && (
+                        <button
+                            onClick={() => setActiveTab('invite')}
+                            className={clsx("pb-2 text-sm font-medium whitespace-nowrap", activeTab === 'invite' ? "border-b-2 border-blue-600 text-blue-600" : "text-zinc-500")}
+                        > Send Invites </button>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
                     {activeTab === 'general' ? (
-                        <form onSubmit={handleSaveGeneral} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Bag Name</label>
-                                <input
-                                    value={name}
-                                    onChange={e => setName(e.target.value)}
-                                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Access Type</label>
-                                <select
-                                    value={accessType}
-                                    onChange={e => setAccessType(e.target.value)}
-                                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                        <div className="space-y-6">
+                            <form onSubmit={handleSaveGeneral} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Bag Name</label>
+                                    <input
+                                        value={name}
+                                        onChange={e => setName(e.target.value)}
+                                        className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Access Type</label>
+                                    <select
+                                        value={accessType}
+                                        onChange={e => setAccessType(e.target.value)}
+                                        className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                                    >
+                                        <option value="private">Private (Host Only)</option>
+                                        <option value="invite">Invite Only</option>
+                                        <option value="request">Request Access</option>
+                                        <option value="public">Public (Everyone)</option>
+                                    </select>
+                                    <p className="text-xs text-zinc-500 mt-1">
+                                        Note: Switching to a restricted mode will require guests to rejoin.
+                                    </p>
+                                </div>
+                                <div className="pt-2">
+                                    <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50">
+                                        {saving ? "Saving..." : "Save Changes"}
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800">
+                                <h4 className="text-sm font-bold text-red-600 mb-2">Danger Zone</h4>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    className="w-full border border-red-200 bg-red-50 dark:bg-red-900/10 text-red-600 py-2 rounded hover:bg-red-100 dark:hover:bg-red-900/20 disabled:opacity-50"
                                 >
-                                    <option value="private">Private (Invite Only)</option>
-                                    <option value="public">Public (Anyone can join)</option>
-                                    <option value="request">Request Access (Admin approves)</option>
-                                </select>
-                            </div>
-                            <div className="pt-4">
-                                <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50">
-                                    {saving ? "Saving..." : "Save Changes"}
+                                    {deleting ? "Deleting..." : "Delete Bag"}
                                 </button>
                             </div>
-                        </form>
-                    ) : (
+                        </div>
+                    ) : activeTab === 'requests' ? (
                         <div className="space-y-4">
                             {loadingRequests ? (
                                 <div className="text-center text-zinc-500 py-8">Loading requests...</div>
@@ -428,6 +539,27 @@ function SettingsModal({ bagId, metadata, onClose }: { bagId: string, metadata: 
                                 ))
                             )}
                         </div>
+                    ) : (
+                        // Invite Tab
+                        <form onSubmit={handleInvite} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">User Email</label>
+                                <input
+                                    type="email"
+                                    value={inviteEmail}
+                                    onChange={e => setInviteEmail(e.target.value)}
+                                    placeholder="friend@example.com"
+                                    required
+                                    className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
+                                />
+                                <p className="text-xs text-zinc-500 mt-2">
+                                    The user will receive an invite on their dashboard.
+                                </p>
+                            </div>
+                            <button type="submit" disabled={sendingInvite} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50">
+                                {sendingInvite ? "Sending..." : "Send Invite"}
+                            </button>
+                        </form>
                     )}
                 </div>
             </div>
