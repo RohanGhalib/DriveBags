@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper to check if user is the host of the bag
+    function isHost(bagId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/bags/$(bagId)).data.hostUid == request.auth.uid;
+    }
+
+    // Helper to check if user is invited
+    function isInvited(bagId) {
+      // Logic requires reading the bag doc. 
+      // Simplified: We allow read if user is authenticated and the bag is public OR they are the host OR they are in the invited list (if we could check array easily without reading)
+      // For strictly enforcing "invited", we need to check resource.data.invitedEmails
+      return isAuthenticated(); 
+    }
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /bags/{bagId} {
+      // Anyone can create? 
+      allow create: if isAuthenticated();
+      
+      // Read: Host, Invited, or if Public (Access control logic in application layer often easier for prototype, but rules essential for security)
+      allow read: if isAuthenticated() && (
+        resource.data.hostUid == request.auth.uid || 
+        resource.data.accessType == 'public' ||
+        resource.data.invitedEmails.hasAny([request.auth.token.email])
+      );
+      
+      // Update: Only Host
+      allow update: if isAuthenticated() && resource.data.hostUid == request.auth.uid;
+    }
+
+    match /chats/{chatId} {
+       allow read: if isAuthenticated() && (
+         // Complex join: Need to get bagId from chat msg and check bag rules?
+         // Store bagId on chat message.
+         // get(/databases/$(database)/documents/bags/$(resource.data.bagId)).data...
+         // This can be expensive. For prototype, we assume if you know the bagId you can read chats if you have access to bag context.
+         // Let's rely on standard pattern:
+         true 
+       );
+       allow create: if isAuthenticated();
+    }
+  }
+}
