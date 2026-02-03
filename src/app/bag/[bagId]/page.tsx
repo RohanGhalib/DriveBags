@@ -10,7 +10,6 @@ import Link from "next/link";
 import ManageAccessPanel from "@/components/ManageAccessPanel";
 
 import BagChat from "@/components/BagChat";
-import { useSwipeable } from "react-use-measure"; // Wait, I don't have use-swipeable. I'll implement custom handlers or just use Framer Motion pan.
 import { motion, PanInfo } from "framer-motion";
 
 export default function BagPage() {
