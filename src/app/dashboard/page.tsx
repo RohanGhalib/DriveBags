@@ -5,315 +5,305 @@ import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase/config";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import Link from "next/link";
-import { FolderPlus, HardDrive, Share2, LogOut, X } from "lucide-react";
+import { Folder, Plus, User, Shield, Globe, Mail, Lock, Search, Filter, X, Check, Clock, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import clsx from "clsx";
+
+type Bag = {
+    id: string;
+    name: string;
+    hostUid: string;
+    accessType: 'private' | 'public' | 'invite' | 'request';
+    invitedEmails: string[];
+    createdAt: string;
+    hostData?: any;
+};
 
 export default function Dashboard() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
-    const [myBags, setMyBags] = useState<any[]>([]);
-    const [joinedBags, setJoinedBags] = useState<any[]>([]);
-    const [connecting, setConnecting] = useState(false);
+    const [bags, setBags] = useState<Bag[]>([]);
     const [loadingData, setLoadingData] = useState(true);
-    const [isDriveConnected, setIsDriveConnected] = useState(false);
+    const [filter, setFilter] = useState<'all' | 'mine' | 'shared'>('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
 
+    // Invites & Requests
+    const [invites, setInvites] = useState<any[]>([]);
+    const [myRequests, setMyRequests] = useState<any[]>([]);
+
+    // Auth Check
     useEffect(() => {
-        if (!loading && !user) {
-            router.push("/");
-        }
+        if (!loading && !user) router.push("/");
     }, [user, loading, router]);
 
+    // Data Fetching
     useEffect(() => {
-        const handleCodeExchange = async () => {
-            const params = new URLSearchParams(window.location.search);
-            const code = params.get('google_drive_code');
-            if (code && user) {
-                setConnecting(true);
-                try {
-                    const token = await user.getIdToken();
-                    const res = await fetch('/api/auth/drive/exchange', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ code })
-                    });
-                    if (res.ok) {
-                        alert("Google Drive Connected Successfully!");
-                        router.replace('/dashboard'); // Clear URL
-                        setIsDriveConnected(true);
-                    } else {
-                        const d = await res.json();
-                        alert("Failed to connect Drive: " + d.error);
+        if (!user) return;
+
+        const fetchData = async () => {
+            setLoadingData(true);
+            try {
+                // Fetch My Bags
+                const qMy = query(collection(db, "bags"), where("hostUid", "==", user.uid));
+                const snapMy = await getDocs(qMy);
+                const myBags = snapMy.docs.map(d => ({ id: d.id, ...d.data() } as Bag));
+
+                // Fetch Shared Bags (where invited)
+                const qShared = query(collection(db, "bags"), where("invitedEmails", "array-contains", user.email));
+                const snapShared = await getDocs(qShared);
+                const sharedBags = snapShared.docs.map(d => ({ id: d.id, ...d.data() } as Bag));
+
+                // Combine and Deduplicate
+                const all = [...myBags];
+                sharedBags.forEach(b => {
+                    if (!all.find(existing => existing.id === b.id)) {
+                        all.push(b);
                     }
-                } catch (e) {
-                    console.error(e);
-                    alert("Error connecting Drive");
-                } finally {
-                    setConnecting(false);
+                });
+
+                // Sort by new
+                all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+                setBags(all);
+
+                // Fetch Invites & Requests
+                const token = await user.getIdToken();
+
+                // Invites
+                const invRes = await fetch('/api/user/invitations', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (invRes.ok) {
+                    const d = await invRes.json();
+                    setInvites(d.invites || []);
                 }
+
+                // Requests
+                const reqRes = await fetch('/api/user/requests', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (reqRes.ok) {
+                    const d = await reqRes.json();
+                    setMyRequests(d.requests || []);
+                }
+
+            } catch (e) {
+                console.error("Error fetching data:", e);
+            } finally {
+                setLoadingData(false);
             }
         };
-
-        if (user) {
-            handleCodeExchange();
-
-            const fetchData = async () => {
-                setLoadingData(true);
-                try {
-                    // 1. Check User Profile for Drive Connection
-                    const userDoc = await getDocs(query(collection(db, "users"), where("__name__", "==", user.uid)));
-                    if (!userDoc.empty) {
-                        const userData = userDoc.docs[0].data();
-                        if (userData.driveConnectedAt) {
-                            setIsDriveConnected(true);
-                        }
-                    }
-
-                    // 2. My Bags
-                    const qMy = query(collection(db, "bags"), where("hostUid", "==", user.uid));
-                    const snapMy = await getDocs(qMy);
-                    setMyBags(snapMy.docs.map(d => ({ id: d.id, ...d.data() })));
-
-                    // 3. Joined Bags
-                    try {
-                        const qJoined = query(collection(db, "bags"), where("invitedEmails", "array-contains", user.email));
-                        const snapJoined = await getDocs(qJoined);
-                        setJoinedBags(snapJoined.docs.map(d => ({ id: d.id, ...d.data() })));
-                    } catch (e) {
-                        console.log("Index might be missing for joined bags query", e);
-                    }
-                } catch (error) {
-                    console.error("Error fetching dashboard data:", error);
-                } finally {
-                    setLoadingData(false);
-                }
-            };
-
-            fetchData();
-        }
+        fetchData();
     }, [user]);
 
+    // Derived State
+    const filteredBags = bags.filter(bag => {
+        if (filter === 'mine') return bag.hostUid === user?.uid;
+        if (filter === 'shared') return bag.hostUid !== user?.uid;
+        return true;
+    });
 
-
-    const handleConnectDrive = async () => {
-        // Redirect to Auth API
-        window.location.href = "/api/auth/drive";
-    };
-
-    if (loading || !user) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+    if (loading || !user) return <div className="h-screen flex items-center justify-center text-primary-green"><Loader2 className="animate-spin" /></div>;
 
     return (
-        <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 p-8">
-            <header className="flex justify-between items-center mb-10">
-                <h1 className="text-3xl font-bold tracking-tight">DriveBags</h1>
-                <div className="flex items-center gap-4">
-                    <div className="text-sm text-zinc-500">{user.email}</div>
-                    <button onClick={logout} className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800">
-                        <LogOut size={18} />
-                    </button>
-                </div>
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                {/* My Bags */}
+        <div className="space-y-8">
+            {/* Header Area */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <HardDrive size={20} /> My Bags
-                        </h2>
-                        <div className="flex gap-2">
-                            {!isDriveConnected && (
-                                <button onClick={handleConnectDrive} disabled={connecting} className="text-xs bg-blue-600/10 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-600/20 disabled:opacity-50">
-                                    {connecting ? "Connecting..." : "Connect Drive"}
-                                </button>
-                            )}
-                            <button onClick={() => setShowCreateModal(true)} className="text-xs bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black px-3 py-1.5 rounded-md flex items-center gap-1">
-                                <FolderPlus size={14} /> New Bag
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        {loadingData ? (
-                            <div className="text-center py-8 text-zinc-400">Loading your bags...</div>
-                        ) : myBags.length === 0 ? (
-                            <p className="text-zinc-500 text-sm">No bags created yet.</p>
-                        ) : (
-                            myBags.map(bag => (
-                                <Link key={bag.id} href={`/bag/${bag.id}`} className="block p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400 transition-colors">
-                                    <div className="font-medium">{bag.name}</div>
-                                    <div className="text-xs text-zinc-500 mt-1">{bag.accessType} • {new Date(bag.createdAt).toLocaleDateString()}</div>
-                                </Link>
-                            ))
-                        )}
-                    </div>
+                    <h1 className="text-3xl font-bold tracking-tight text-zinc-900">My DriveBags</h1>
+                    <p className="text-zinc-500 mt-1">Manage and collaborate on your secure folders.</p>
                 </div>
-
-                {/* Joined Bags */}
-                <div>
-                    <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
-                        <Share2 size={20} /> Joined Bags
-                    </h2>
-                    <div className="space-y-3">
-                        {loadingData ? (
-                            <div className="text-center py-8 text-zinc-400">Loading joined bags...</div>
-                        ) : joinedBags.length === 0 ? (
-                            <p className="text-zinc-500 text-sm">No joined bags.</p>
-                        ) : (
-                            joinedBags.map(bag => (
-                                <Link key={bag.id} href={`/bag/${bag.id}`} className="block p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-400 transition-colors">
-                                    <div className="font-medium">{bag.name}</div>
-                                    <div className="text-xs text-zinc-500 mt-1">Host ID: {bag.hostUid.slice(0, 6)}...</div>
-                                </Link>
-                            ))
-                        )}
-                    </div>
-                </div>
+                <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="flex items-center gap-2 bg-primary-green text-white px-5 py-2.5 rounded-full font-medium hover:brightness-110 transition-all shadow-sm shadow-green-200"
+                >
+                    <Plus size={20} /> New Bag
+                </button>
             </div>
 
-            {/* Pending Invites & Requests */}
-            {/* Pending Invites & Requests */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-8 border-t border-zinc-200 dark:border-zinc-800 mt-12">
-                <PendingInvites user={user} />
-                <PendingRequests user={user} />
-            </div>
-
-            {showCreateModal && (
-                <CreateBagModal onClose={() => setShowCreateModal(false)} />
+            {/* Notifications Area (Invites & Requests) */}
+            {(invites.length > 0 || myRequests.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {invites.length > 0 && <PendingInvites invites={invites} />}
+                    {myRequests.length > 0 && <PendingRequests requests={myRequests} />}
+                </div>
             )}
+
+            {/* Filters */}
+            <div className="flex items-center gap-6 border-b border-zinc-100 pb-1">
+                <FilterTab label="All Bags" active={filter === 'all'} onClick={() => setFilter('all')} />
+                <FilterTab label="Created by Me" active={filter === 'mine'} onClick={() => setFilter('mine')} />
+                <FilterTab label="Shared with Me" active={filter === 'shared'} onClick={() => setFilter('shared')} />
+            </div>
+
+            {/* Grid */}
+            {loadingData ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
+                    {[1, 2, 3].map(i => <div key={i} className="h-48 bg-zinc-100 rounded-xl" />)}
+                </div>
+            ) : filteredBags.length === 0 ? (
+                <div className="text-center py-20 border-2 border-dashed border-zinc-100 rounded-2xl">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-50 mb-4 text-zinc-400">
+                        <Folder size={32} />
+                    </div>
+                    <h3 className="text-lg font-medium text-zinc-900">No bags found</h3>
+                    <p className="text-zinc-500 mt-1">Create a new bag to get started.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredBags.map(bag => (
+                        <BagCard key={bag.id} bag={bag} currentUid={user.uid} />
+                    ))}
+                </div>
+            )}
+
+            {showCreateModal && <CreateBagModal onClose={() => setShowCreateModal(false)} />}
         </div>
     );
 }
 
-function PendingInvites({ user }: { user: any }) {
-    const [invites, setInvites] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+function PendingInvites({ invites }: { invites: any[] }) {
+    const { user } = useAuth();
 
-    useEffect(() => {
-        if (!user) return;
-        const fetchInvites = async () => {
-            try {
-                const token = await user.getIdToken();
-                const res = await fetch('/api/user/invitations', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setInvites(data.invites);
-                }
-            } catch (e) { console.error(e); }
-            setLoading(false);
-        };
-        fetchInvites();
-    }, [user]);
-
-    const handleRespond = async (inviteId: string, decision: 'accept' | 'reject') => {
+    const handleRespond = async (inviteId: string, accept: boolean) => {
         try {
-            const token = await user.getIdToken();
+            const token = await user?.getIdToken();
             const res = await fetch('/api/invitations/respond', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inviteId, decision })
+                body: JSON.stringify({ inviteId, decision: accept ? 'accept' : 'reject' })
             });
             if (res.ok) {
-                setInvites(prev => prev.filter(i => i.id !== inviteId));
-                if (decision === 'accept') window.location.reload(); // Refresh to show in Joined
+                window.location.reload();
+            } else {
+                const data = await res.json();
+                alert(`Error: ${data.error}`);
             }
         } catch (e) { console.error(e); }
     };
 
-    if (loading) return <div>Loading invites...</div>;
-    if (invites.length === 0) return null;
-
     return (
-        <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-4 text-blue-600">
-                Inbox (Invites)
-            </h2>
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
+            <h3 className="text-blue-900 font-bold mb-4 flex items-center gap-2">
+                <Mail size={18} /> Bag Invitations
+            </h3>
             <div className="space-y-3">
-                {invites.map(invite => (
-                    <div key={invite.id} className="p-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-800 flex justify-between items-center">
+                {invites.map(inv => (
+                    <div key={inv.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between">
                         <div>
-                            <div className="font-medium">{invite.bagName}</div>
-                            <div className="text-xs text-zinc-500">Invited by Host</div>
+                            <div className="font-bold text-zinc-900">{inv.bagName}</div>
+                            <div className="text-xs text-zinc-500">Invited to join</div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => handleRespond(invite.id, 'reject')} className="p-2 text-red-500 hover:bg-red-100 rounded">
-                                Reject
-                            </button>
-                            <button onClick={() => handleRespond(invite.id, 'accept')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                                Join
-                            </button>
+                            <button onClick={() => handleRespond(inv.id, false)} className="p-2 text-zinc-400 hover:bg-zinc-50 rounded-lg transition-colors"><X size={18} /></button>
+                            <button onClick={() => handleRespond(inv.id, true)} className="px-4 py-2 bg-primary-green text-white text-sm font-bold rounded-lg hover:brightness-110 transition-all">Accept</button>
                         </div>
                     </div>
                 ))}
             </div>
         </div>
-    );
+    )
 }
 
-function PendingRequests({ user }: { user: any }) {
-    // This is tricky. Users don't store "my requests".
-    // We need a way to find bags where "I" have a pending request.
-    // We can use a Collection Group Query on 'requests' collection WHERE uid == user.uid
-    const [requests, setRequests] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (!user) return;
-        // NOTE: This usually requires a Firestore Index if we query complex fields.
-        // But straight up: collectionGroup('requests').where('uid', '==', user.uid)
-        // should work if 'requests' subcollections exist.
-        // However, we need Bag Name. The request doc itself might not have it unless we duplicated it.
-        // Let's assume we don't have bagName in request doc. We'd need to fetch parent bag.
-        // BUT, for now, let's just fetch them.
-
-        // Actually, in `api/bags/[bagId]/page.tsx`, we saw the 'requests' subcollection structure.
-        // It has { uid, email, createdAt, status }.
-        // We'll need to fetch the parent bag to get the name.
-
-        const fetchRequests = async () => {
-            // We can't easily do parent fetch in client without more work.
-            // For the prototype, let's skip "Pending Requests" list OR implement a simple API for it?
-            // Prompt says: "bag should show on dashboard ... with pending approval".
-            // Let's implement an endpoint /api/user/requests that does the heavy lifting.
-            try {
-                const token = await user.getIdToken();
-                const res = await fetch('/api/user/requests', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setRequests(data.requests);
-                }
-            } catch (e) { console.error(e); }
-            setLoading(false);
-        };
-        fetchRequests();
-    }, [user]);
-
-    if (loading) return <div>Loading requests...</div>;
-    if (requests.length === 0) return null;
-
+function PendingRequests({ requests }: { requests: any[] }) {
     return (
-        <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2 mb-4 text-orange-600">
-                Pending Approval
-            </h2>
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6">
+            <h3 className="text-amber-900 font-bold mb-4 flex items-center gap-2">
+                <Clock size={18} /> Sent Requests
+            </h3>
             <div className="space-y-3">
                 {requests.map(req => (
-                    <div key={req.bagId} className="p-4 rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-900/10 dark:border-orange-800 opacity-75">
-                        <div className="font-medium">{req.bagName || 'Unknown Bag'}</div>
-                        <div className="text-xs text-orange-600">Waiting for host approval...</div>
+                    <div key={req.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between">
+                        <div>
+                            <div className="font-bold text-zinc-900">{req.bagName || 'Unknown Bag'}</div>
+                            <div className="text-xs text-amber-600 font-medium capitalize">{req.status}</div>
+                        </div>
+                        <div className="w-8 h-8 flex items-center justify-center bg-zinc-50 text-zinc-400 rounded-lg">
+                            <Clock size={16} />
+                        </div>
                     </div>
                 ))}
             </div>
         </div>
+    )
+}
+
+function FilterTab({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) {
+    return (
+        <button
+            onClick={onClick}
+            className={clsx(
+                "pb-3 text-sm font-medium transition-colors relative",
+                active ? "text-primary-green" : "text-zinc-500 hover:text-zinc-800"
+            )}
+        >
+            {label}
+            {active && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-green rounded-full" />}
+        </button>
     );
 }
+
+function BagCard({ bag, currentUid }: { bag: Bag, currentUid: string }) {
+    const isHost = bag.hostUid === currentUid;
+
+    // Access Badge Helper
+    const getAccessBadge = () => {
+        switch (bag.accessType) {
+            case 'private': return { label: 'Private', icon: Lock, bg: 'bg-zinc-100', text: 'text-zinc-600' };
+            case 'invite': return { label: 'Invite Only', icon: Mail, bg: 'bg-blue-50', text: 'text-blue-600' };
+            case 'public': return { label: 'Public', icon: Globe, bg: 'bg-green-50', text: 'text-green-600' };
+            case 'request': return { label: 'Request', icon: Shield, bg: 'bg-amber-50', text: 'text-amber-600' };
+            default: return { label: 'Unknown', icon: Lock, bg: 'bg-zinc-100', text: 'text-zinc-600' };
+        }
+    };
+    const badge = getAccessBadge();
+
+    return (
+        <Link
+            href={`/bag/${bag.id}`}
+            className="group block bg-white rounded-xl border border-zinc-100 p-5 shadow-sm hover:shadow-md hover:border-zinc-200 transition-all"
+        >
+            <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-blue-50 text-blue-500 rounded-lg group-hover:bg-primary-green group-hover:text-white transition-colors">
+                    <Folder size={24} fill="currentColor" className="opacity-90" />
+                </div>
+                {/* Access Badge */}
+                <div className={clsx("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", badge.bg, badge.text)}>
+                    <badge.icon size={12} />
+                    {badge.label}
+                </div>
+            </div>
+
+            <h3 className="text-lg font-bold text-zinc-900 group-hover:text-primary-green transition-colors truncate">
+                {bag.name}
+            </h3>
+
+            <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400 border border-white shadow-sm overflow-hidden">
+                        {/* Placeholder for Host Avatar */}
+                        <User size={12} />
+                    </div>
+                    <span className="text-xs text-zinc-500">
+                        {isHost ? 'Hosted by You' : 'External Host'}
+                    </span>
+                </div>
+
+                {/* Visual Stack (Mock for now, would need real participant data) */}
+                <div className="flex -space-x-2">
+                    {bag.invitedEmails?.length > 0 && (
+                        <>
+                            <div className="w-6 h-6 rounded-full bg-zinc-200 border-2 border-white flex items-center justify-center text-[10px] text-zinc-600">
+                                {bag.invitedEmails[0][0].toUpperCase()}
+                            </div>
+                            {bag.invitedEmails.length > 1 && (
+                                <div className="w-6 h-6 rounded-full bg-zinc-100 border-2 border-white flex items-center justify-center text-[10px] text-zinc-500">
+                                    +{bag.invitedEmails.length - 1}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        </Link>
+    );
+}
+
 
 function CreateBagModal({ onClose }: { onClose: () => void }) {
     const { user } = useAuth();
@@ -352,45 +342,81 @@ function CreateBagModal({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-lg w-full max-w-md border border-zinc-200 dark:border-zinc-800 shadow-xl">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold">Create New Bag</h3>
-                    <button onClick={onClose}><X size={20} /></button>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+            <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-zinc-900">Create New Bag</h3>
+                    <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600"><X size={24} /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     <div>
-                        <label className="block text-sm font-medium mb-1">Bag Name</label>
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Bag Name</label>
                         <input
                             value={name}
                             onChange={e => setName(e.target.value)}
-                            className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
-                            placeholder="e.g. Project Assets"
+                            className="w-full px-4 py-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-primary-green/20 focus:border-primary-green transition-all"
+                            placeholder="e.g. Q4 Marketing Assets"
                             required
+                            autoFocus
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-1">Access Type</label>
-                        <select
-                            value={accessType}
-                            onChange={e => setAccessType(e.target.value)}
-                            className="w-full p-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
-                        >
-                            <option value="private">Private (Invite Only)</option>
-                            <option value="public">Public (Anyone can join)</option>
-                            <option value="request">Request Access (Admin approves)</option>
-                        </select>
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Access Type</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <AccessOption
+                                label="Private"
+                                desc="Only you"
+                                active={accessType === 'private'}
+                                onClick={() => setAccessType('private')}
+                            />
+                            <AccessOption
+                                label="Invite Only"
+                                desc="Specific people"
+                                active={accessType === 'invite'}
+                                onClick={() => setAccessType('invite')}
+                            />
+                            <AccessOption
+                                label="Request"
+                                desc="Approved requests"
+                                active={accessType === 'request'}
+                                onClick={() => setAccessType('request')}
+                            />
+                            <AccessOption
+                                label="Public"
+                                desc="Anyone with link"
+                                active={accessType === 'public'}
+                                onClick={() => setAccessType('public')}
+                            />
+                        </div>
                     </div>
-                    <div className="flex justify-end gap-2 mt-6">
-                        <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-300">
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-lg text-zinc-600 font-medium hover:bg-zinc-50 transition-colors">
                             Cancel
                         </button>
-                        <button type="submit" disabled={creating} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                        <button type="submit" disabled={creating} className="px-5 py-2.5 rounded-lg bg-primary-green text-white font-medium hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-green-200">
                             {creating ? "Creating..." : "Create Bag"}
                         </button>
                     </div>
                 </form>
             </div>
         </div>
+    );
+}
+
+function AccessOption({ label, desc, active, onClick }: any) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={clsx(
+                "p-3 rounded-lg border text-left transition-all",
+                active
+                    ? "border-primary-green bg-green-50/50 ring-1 ring-primary-green"
+                    : "border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
+            )}
+        >
+            <div className={clsx("text-sm font-semibold", active ? "text-primary-green" : "text-zinc-900")}>{label}</div>
+            <div className="text-xs text-zinc-500">{desc}</div>
+        </button>
     );
 }

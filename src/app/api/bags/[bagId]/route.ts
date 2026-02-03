@@ -1,6 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin, authAdmin } from '@/lib/firebase/admin';
 
+export async function GET(req: NextRequest, props: { params: Promise<{ bagId: string }> }) {
+    try {
+        const params = await props.params;
+        const { bagId } = params;
+
+        // 1. Auth Check - anyone who can access the bag can see details?
+        // Actually, only Host or Participants should see details.
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await authAdmin.verifyIdToken(idToken);
+        const uid = decodedToken.uid;
+        const email = decodedToken.email;
+
+        // 2. Fetch Bag
+        const bagRef = dbAdmin.collection('bags').doc(bagId);
+        const bagDoc = await bagRef.get();
+
+        if (!bagDoc.exists) {
+            return NextResponse.json({ error: 'Bag not found' }, { status: 404 });
+        }
+
+        const bagData = bagDoc.data();
+
+        // 3. Access Check
+        const isHost = bagData?.hostUid === uid;
+        const isParticipant = bagData?.invitedEmails?.includes(email);
+        const isPublic = bagData?.accessType === 'public';
+
+        if (!isHost && !isParticipant && !isPublic) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        return NextResponse.json({
+            id: bagDoc.id,
+            ...bagData
+        });
+
+    } catch (error: any) {
+        console.error('Error fetching bag:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function PUT(req: NextRequest, props: { params: Promise<{ bagId: string }> }) {
     try {
         const params = await props.params;

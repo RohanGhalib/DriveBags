@@ -3,17 +3,17 @@ import { dbAdmin, authAdmin } from '@/lib/firebase/admin';
 import { createNotification } from '@/lib/notifications';
 import * as admin from 'firebase-admin';
 
-export async function POST(req: NextRequest, props: { params: Promise<{ bagId: string }> }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ bagId: string }> }) {
     try {
         const params = await props.params;
         const { bagId } = params;
-        const { email } = await req.json();
+        const { email } = await req.json(); // Email to kick
 
         if (!email) {
-            return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+            return NextResponse.json({ error: 'Email required' }, { status: 400 });
         }
 
-        // 1. Auth Check
+        // 1. Auth Check (Host Only)
         const authHeader = req.headers.get('Authorization');
         if (!authHeader?.startsWith('Bearer ')) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -22,8 +22,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ bagId: s
         const decodedToken = await authAdmin.verifyIdToken(idToken);
         const uid = decodedToken.uid;
 
-        // 2. Permission Check (Host Only)
-        // Only host can invite? For now yes.
         const bagRef = dbAdmin.collection('bags').doc(bagId);
         const bagDoc = await bagRef.get();
 
@@ -31,62 +29,53 @@ export async function POST(req: NextRequest, props: { params: Promise<{ bagId: s
             return NextResponse.json({ error: 'Bag not found' }, { status: 404 });
         }
 
-        const bagData = bagDoc.data();
-        if (bagData?.hostUid !== uid) {
+        // Only host can kick
+        if (bagDoc.data()?.hostUid !== uid) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // 3. Create Invitation
-        // Check if already invited? 
-        if (bagData?.invitedEmails?.includes(email)) {
-            return NextResponse.json({ error: 'User already has access' }, { status: 400 });
-        }
-
-        // Check for duplicate pending invite
-        const existingInvites = await dbAdmin.collection('invitations')
-            .where('bagId', '==', bagId)
-            .where('toEmail', '==', email)
-            .where('status', '==', 'pending')
-            .get();
-
-        if (!existingInvites.empty) {
-            return NextResponse.json({ error: 'User already has a pending invite' }, { status: 400 });
-        }
-
-        // Create invitation doc
-        // Create invitation doc
-        await dbAdmin.collection('invitations').add({
-            bagId,
-            bagName: bagData?.name,
-            hostUid: uid,
-            toEmail: email,
-            status: 'pending',
-            createdAt: admin.firestore.FieldValue.serverTimestamp() // Use serverTimestamp
+        // 2. Remove from invitedEmails array
+        await bagRef.update({
+            invitedEmails: admin.firestore.FieldValue.arrayRemove(email)
         });
 
-        // Trigger Notification if the user exists
+        // 3. Mark any invitiations as 'revoked' (optional but good for history)
+        // We can just query for pending/accepted invites for this email and bag and delete or update them.
+        const invitesSnapshot = await dbAdmin.collection('invitations')
+            .where('bagId', '==', bagId)
+            .where('toEmail', '==', email)
+            .get();
+
+        const batch = dbAdmin.batch();
+        invitesSnapshot.docs.forEach(doc => {
+            batch.delete(doc.ref); // Or update status to 'kicked'
+        });
+        await batch.commit();
+
+        // Notify Kicked User
         try {
             const userRecord = await authAdmin.getUserByEmail(email);
             if (userRecord) {
                 await createNotification(
                     userRecord.uid,
-                    'invite_received',
-                    `You have been invited to join ${bagData?.name || 'a bag'}`,
+                    'kicked',
+                    `You have been removed from ${bagDoc.data()?.name || 'a bag'}`,
                     {
                         bagId,
-                        bagName: bagData?.name,
+                        bagName: bagDoc.data()?.name,
                         triggeredByUid: uid,
                         triggeredByEmail: decodedToken.email
                     }
                 );
             }
         } catch (e) {
-            // User might not exist yet
+            // User might not exist or error
         }
 
         return NextResponse.json({ success: true });
+
     } catch (error: any) {
-        console.error('Error sending invite:', error);
+        console.error('Error kicking participant:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

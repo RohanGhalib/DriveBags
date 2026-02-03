@@ -48,8 +48,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-        } catch (error) {
+        } catch (error: any) {
+            if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                console.warn("Sign-in cancelled by user.");
+                return;
+            }
             console.error("Error signing in", error);
+            alert("Failed to sign in: " + (error.message || "Unknown error"));
         }
     };
 

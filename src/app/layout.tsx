@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { UploadProvider } from "@/components/UploadManager";
-import { Toaster } from 'sonner';
+import Navbar from "@/components/Navbar";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,7 +29,15 @@ export default function RootLayout({
             <body className={inter.className}>
                 <AuthProvider>
                     <UploadProvider>
-                        {children}
+                        <div className="min-h-screen flex flex-col bg-zinc-50 font-sans text-zinc-900">
+                            {/* Navbar is client component, will handle its own rendering check if needed, 
+                                but usually we want it everywhere except maybe login if we wanted, 
+                                but instructions say persistent. */}
+                            <Navbar />
+                            <main className="flex-1 w-full max-w-7xl mx-auto">
+                                {children}
+                            </main>
+                        </div>
                     </UploadProvider>
                 </AuthProvider>
             </body>

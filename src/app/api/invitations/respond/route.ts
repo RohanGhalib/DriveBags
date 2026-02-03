@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin, authAdmin } from '@/lib/firebase/admin';
+import { createNotification } from '@/lib/notifications';
 import * as admin from 'firebase-admin';
 
 export async function POST(req: NextRequest) {
@@ -45,6 +46,21 @@ export async function POST(req: NextRequest) {
                 invitedEmails: admin.firestore.FieldValue.arrayUnion(email)
             });
             await inviteRef.update({ status: 'accepted' });
+
+            // Notify Host
+            if (inviteData?.hostUid) {
+                await createNotification(
+                    inviteData.hostUid,
+                    'invite_accepted',
+                    `${email} joined ${inviteData.bagName || 'your bag'}`,
+                    {
+                        bagId: inviteData.bagId,
+                        bagName: inviteData.bagName,
+                        triggeredByUid: decodedToken.uid,
+                        triggeredByEmail: email
+                    }
+                );
+            }
         } else {
             await inviteRef.update({ status: 'rejected' });
         }

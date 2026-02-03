@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAdmin, authAdmin } from '@/lib/firebase/admin';
+import { createNotification } from '@/lib/notifications';
 import * as admin from 'firebase-admin';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ bagId: string }> }) {
@@ -50,6 +51,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ bagId: s
                 invitedEmails: admin.firestore.FieldValue.arrayUnion(requestData?.email)
             });
             await requestRef.update({ status: 'approved' });
+
+            // Notify Requester
+            await createNotification(
+                requestId, // Requester UID
+                'request_approved',
+                `Your request to join ${bagDoc.data()?.name || 'a bag'} was approved`,
+                {
+                    bagId,
+                    bagName: bagDoc.data()?.name,
+                    triggeredByUid: uid, // Host UID
+                    triggeredByEmail: decodedToken.email
+                }
+            );
+
         } else {
             await requestRef.update({ status: 'denied' });
         }
