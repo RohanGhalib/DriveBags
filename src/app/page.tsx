@@ -36,9 +36,10 @@ export default function LandingPage() {
         <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-blue-100">
 
             {/* --- NAVBAR --- */}
-            <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
-                <div className="max-w-7xl mx-auto pr-6 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-2 pl-6">
+            {/* --- NAVBAR --- */}
+            <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6">
+                <div className="max-w-7xl mx-auto h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-primary-green rounded-lg flex items-center justify-center text-white">
                             <FolderOpen size={18} strokeWidth={3} />
                         </div>
@@ -71,7 +72,7 @@ export default function LandingPage() {
             </nav>
 
             {/* --- HERO SECTION --- */}
-            <section className="pt-32 pb-20 px-6">
+            <section className="pt-20 pb-20 px-6">
                 <div className="max-w-5xl mx-auto text-center">
                     <div className="inline-flex items-center gap-2 bg-green-50 text-primary-green px-4 py-1.5 rounded-full text-sm font-medium mb-8 border border-green-100">
                         <span className="relative flex h-2 w-2">
@@ -244,40 +245,42 @@ export default function LandingPage() {
             </section>
 
             {/* --- TECH STACK (Developer Focused) --- */}
-            <section id="tech-stack" className="py-24 bg-slate-900 text-white px-6">
-                <div className="max-w-6xl mx-auto">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
-                        <div>
-                            <h2 className="text-3xl font-bold mb-4 flex items-center gap-3">
-                                <Code2 className="text-primary-green" />
-                                Built for Modern Web
-                            </h2>
-                            <p className="text-slate-400 max-w-lg">
-                                DriveBags is open source and built with the bleeding edge of the React ecosystem.
-                                Check out the code, fork it, and make it your own.
-                            </p>
-                        </div>
-                        <a href="https://github.com/RohanGhalib/DriveBags" className="text-primary-green hover:text-green-400 font-medium flex items-center gap-2">
-                            Explore the Repo <ArrowRight size={18} />
-                        </a>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {[
-                            { name: "Next.js 16", desc: "App Router" },
-                            { name: "Tailwind v4", desc: "Styling" },
-                            { name: "Firebase", desc: "Auth & DB" },
-                            { name: "Google Drive API", desc: "Storage" },
-                            { name: "Framer Motion", desc: "Animations" },
-                            { name: "Lucide", desc: "Iconography" },
-                            { name: "React 19", desc: "Core" },
-                            { name: "Serverless", desc: "Architecture" },
-                        ].map((tech) => (
-                            <div key={tech.name} className="bg-white/5 border border-white/10 p-4 rounded-lg hover:bg-white/10 transition-colors">
-                                <div className="font-bold text-lg">{tech.name}</div>
-                                <div className="text-slate-400 text-sm">{tech.desc}</div>
+            <section id="tech-stack" className="py-12 px-6">
+                <div className="max-w-7xl mx-auto bg-slate-900 text-white rounded-[2.5rem] p-12 md:p-24">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
+                            <div>
+                                <h2 className="text-3xl font-bold mb-4 flex items-center gap-3">
+                                    <Code2 className="text-primary-green" />
+                                    Built for Modern Web
+                                </h2>
+                                <p className="text-slate-400 max-w-lg">
+                                    DriveBags is open source and built with the bleeding edge of the React ecosystem.
+                                    Check out the code, fork it, and make it your own.
+                                </p>
                             </div>
-                        ))}
+                            <a href="https://github.com/RohanGhalib/DriveBags" className="text-primary-green hover:text-green-400 font-medium flex items-center gap-2">
+                                Explore the Repo <ArrowRight size={18} />
+                            </a>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {[
+                                { name: "Next.js 16", desc: "App Router" },
+                                { name: "Tailwind v4", desc: "Styling" },
+                                { name: "Firebase", desc: "Auth & DB" },
+                                { name: "Google Drive API", desc: "Storage" },
+                                { name: "Framer Motion", desc: "Animations" },
+                                { name: "Lucide", desc: "Iconography" },
+                                { name: "React 19", desc: "Core" },
+                                { name: "Serverless", desc: "Architecture" },
+                            ].map((tech) => (
+                                <div key={tech.name} className="bg-white/5 border border-white/10 p-4 rounded-lg hover:bg-white/10 transition-colors">
+                                    <div className="font-bold text-lg">{tech.name}</div>
+                                    <div className="text-slate-400 text-sm">{tech.desc}</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </section>
